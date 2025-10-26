@@ -59,60 +59,6 @@ pytest               # Run tests
 2. Create an issue for significant changes
 3. Follow coding standards below
 
-## 🎯 Priority TODOs
-
-**High Priority:**
-- Fix bug: program crashes with invalid category (2-3 hours)
-- Add tests: `test_database.py` (6-8 hours)
-- Excel/CSV export feature (4-6 hours)
-- Streamlit UI version (8-12 hours)
-
-**Medium Priority:**
-- Google Sheets integration (10-15 hours)
-- Rich CLI with colored output (4-6 hours)
-- Budget tracking and alerts (8-10 hours)
-
-**Lower Priority:**
-- Receipt photo storage (12-15 hours)
-- Multi-currency support (10-12 hours)
-- Data backup and restore (6-8 hours)
-
-## 📏 Coding Standards
-
-**General:**
-- Follow PEP 8 style guidelines
-- Use type hints for all functions
-- Write docstrings for all functions, classes, and modules
-- Keep line length under 88 characters
-
-**Tools:**
-```bash
-# Format code
-black expense-tracker/
-
-# Lint code
-flake8 expense-tracker/
-
-# Type checking
-mypy expense-tracker/
-```
-
-## 🧪 Testing
-
-**Create tests in `tests/` directory:**
-- `test_database.py`, `test_reports.py`, `test_main.py`
-
-**Naming:**
-- Functions start with `test_`
-- Use descriptive names like `test_add_expense_success`
-- Group related tests in classes
-
-**Running:**
-```bash
-pytest                              # Run all tests
-pytest --cov --cov-report=html     # With coverage
-pytest tests/test_database.py      # Specific file
-```
 
 ## 🔄 Pull Request Process
 
@@ -129,12 +75,7 @@ pytest tests/test_database.py      # Specific file
    ```
 5. Commit and push: `git push origin feature/your-feature-name`
 
-**PR Checklist:**
-- [ ] Code follows coding standards
-- [ ] Tests added/updated
-- [ ] Documentation updated
-- [ ] All tests pass
-- [ ] No linting errors
+
 
 ## 🐛 Issue Guidelines
 
