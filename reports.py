@@ -10,6 +10,7 @@ import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import os
+import csv
 from pathlib import Path
 
 from database import ExpenseDatabase
@@ -28,6 +29,46 @@ class ExpenseReports:
         self.db = db
         self._setup_matplotlib()
     
+    def export_to_csv(self, file_path: Optional[str] = None) -> str:
+        """
+        Export all expenses to a CSV file.
+        
+        Args:
+            file_path: Optional path for the CSV file. If not provided, a file
+                       will be created under an `exports/` directory with a
+                       timestamped filename.
+        
+        Returns:
+            The path to the written CSV file.
+        """
+        expenses = self.db.get_all_expenses()
+        if not expenses:
+            raise ValueError("No expenses available to export.")
+
+        # Determine output path
+        if file_path is None:
+            exports_dir = Path("exports")
+            exports_dir.mkdir(exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_path = str(exports_dir / f"expenses_{timestamp}.csv")
+        else:
+            out_path = Path(file_path)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path = str(out_path)
+
+        # Write CSV
+        fieldnames = ["id", "date", "category", "description", "amount", "created_at"]
+        with open(file_path, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for exp in expenses:
+                # Ensure only expected fields are written
+                row = {key: exp.get(key, "") for key in fieldnames}
+                writer.writerow(row)
+
+        print(f"CSV exported to: {file_path}")
+        return file_path
+
     def _setup_matplotlib(self) -> None:
         """Configure matplotlib for better visualizations."""
         plt.style.use('default')

@@ -235,6 +235,20 @@ class ExpenseTrackerCLI:
         
         print("="*40)
     
+    def export_to_csv(self) -> None:
+        """Export all expenses to a CSV file."""
+        print("\n" + "="*40)
+        print("EXPORT TO CSV")
+        print("="*40)
+        custom_path = input("Enter output CSV path (or press Enter for default): ").strip()
+        try:
+            output_path = self.reports.export_to_csv(custom_path or None)
+            print(f"\n✅ Export successful! File saved at: {output_path}")
+        except ValueError as e:
+            print(f"Error: {e}")
+        except Exception as e:
+            print(f"Unexpected error during export: {e}")
+    
     def run(self) -> None:
         """Run the main CLI loop."""
         print("Personal Expense Tracker")
@@ -249,9 +263,10 @@ class ExpenseTrackerCLI:
             print("5. Show Charts")
             print("6. Detailed Report")
             print("7. Statistics")
+            print("8. Export to CSV")
             print("0. Exit")
             
-            choice = input("\nSelect option (0-7): ").strip()
+            choice = input("\nSelect option (0-8): ").strip()
             
             if choice == '0':
                 print("\nThank you for using Personal Expense Tracker!")
@@ -273,6 +288,8 @@ class ExpenseTrackerCLI:
                 self.show_detailed_report()
             elif choice == '7':
                 self.show_stats()
+            elif choice == '8':
+                self.export_to_csv()
             else:
                 print("Invalid option. Please try again.")
 
