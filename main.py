@@ -77,8 +77,17 @@ class ExpenseTrackerCLI:
                 print("Error: Invalid amount. Please enter a valid number.")
                 return
             
+            # Get tags (optional)
+            tags_input = input("Enter tags (comma-separated, optional): ").strip()
+            tags = [t.strip() for t in tags_input.split(',')] if tags_input else []
+            
             # Add expense to database
             expense_id = self.db.add_expense(expense_date, category, description, amount)
+            if tags:
+                try:
+                    self.db.set_tags_for_expense(expense_id, tags)
+                except Exception as e:
+                    print(f"Warning: Failed to set tags: {e}")
             
             print(f"\n✅ Expense added successfully!")
             print(f"   ID: {expense_id}")
@@ -86,6 +95,8 @@ class ExpenseTrackerCLI:
             print(f"   Category: {category}")
             print(f"   Description: {description}")
             print(f"   Amount: ${amount:.2f}")
+            if tags:
+                print(f"   Tags: {', '.join(tags)}")
             
         except ValueError as e:
             print(f"Error: {e}")
@@ -228,6 +239,54 @@ class ExpenseTrackerCLI:
         except Exception as e:
             print(f"Unexpected error: {e}")
     
+    def manage_tags(self) -> None:
+        """Manage tags for a specific expense."""
+        while True:
+            print("\n" + "="*40)
+            print("MANAGE TAGS")
+            print("="*40)
+            print("1. View tags for expense")
+            print("2. Set/replace tags for expense")
+            print("3. Add tags to expense")
+            print("4. Remove a tag from expense")
+            print("0. Back to main menu")
+            choice = input("\nSelect option (0-4): ").strip()
+            if choice == '0':
+                break
+            try:
+                expense_id_input = input("Expense ID: ").strip()
+                expense_id = int(expense_id_input)
+                expense = self.db.get_expense_by_id(expense_id)
+                if not expense:
+                    print(f"Error: Expense with ID {expense_id} not found.")
+                    continue
+                if choice == '1':
+                    tags = self.db.get_tags_for_expense(expense_id)
+                    print(f"Tags: {', '.join(tags) if tags else '(none)'}")
+                elif choice == '2':
+                    tags_input = input("Tags (comma-separated): ").strip()
+                    tags = [t.strip() for t in tags_input.split(',')] if tags_input else []
+                    self.db.set_tags_for_expense(expense_id, tags)
+                    print("✅ Tags updated.")
+                elif choice == '3':
+                    tags_input = input("Tags to add (comma-separated): ").strip()
+                    tags = [t.strip() for t in tags_input.split(',')] if tags_input else []
+                    self.db.add_tags_to_expense(expense_id, tags)
+                    print("✅ Tags added.")
+                elif choice == '4':
+                    tag = input("Tag to remove: ").strip()
+                    if not tag:
+                        print("Error: Tag cannot be empty.")
+                        continue
+                    self.db.remove_tag_from_expense(expense_id, tag)
+                    print("✅ Tag removed (if it existed).")
+                else:
+                    print("Invalid option. Please try again.")
+            except ValueError:
+                print("Error: Please enter valid input.")
+            except Exception as e:
+                print(f"Unexpected error: {e}")
+    
     def show_summaries(self) -> None:
         """Show category and monthly summaries."""
         print("\n" + "="*50)
@@ -353,6 +412,8 @@ class ExpenseTrackerCLI:
         end_date = input("End date YYYY-MM-DD: ").strip()
         min_amount_in = input("Min amount: $").strip()
         max_amount_in = input("Max amount: $").strip()
+        tags_input = input("Tags (comma-separated): ").strip()
+        tag_mode = input("Tag match mode (any/all, default any): ").strip().lower()
         
         # Normalize inputs
         keyword = keyword or None
@@ -371,6 +432,8 @@ class ExpenseTrackerCLI:
             return
 
         try:
+            tags = [t.strip() for t in tags_input.split(',')] if tags_input else None
+            tags_match_all = (tag_mode == 'all')
             results = self.db.search_expenses(
                 keyword=keyword,
                 category=category,
@@ -378,6 +441,8 @@ class ExpenseTrackerCLI:
                 end_date=end_date,
                 min_amount=min_amount,
                 max_amount=max_amount,
+                tags=tags,
+                tags_match_all=tags_match_all,
             )
         except ValueError as e:
             print(f"Error: {e}")
@@ -458,9 +523,10 @@ class ExpenseTrackerCLI:
             print("10. Budgets")
             print("11. Calculator")
             print("12. Search / Filter")
+            print("13. Manage Tags")
             print("0. Exit")
             
-            choice = input("\nSelect option (0-12): ").strip()
+            choice = input("\nSelect option (0-13): ").strip()
             
             if choice == '0':
                 print("\nThank you for using Personal Expense Tracker!")
@@ -492,6 +558,8 @@ class ExpenseTrackerCLI:
                 self.calculator_menu()
             elif choice == '12':
                 self.search_and_filter()
+            elif choice == '13':
+                self.manage_tags()
             else:
                 print("Invalid option. Please try again.")
 

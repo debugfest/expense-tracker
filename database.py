@@ -48,6 +48,25 @@ class ExpenseDatabase:
                 )
             """)
             
+            # Create tags table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS tags (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL UNIQUE
+                )
+            """)
+            
+            # Create expense_tags junction table
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS expense_tags (
+                    expense_id INTEGER NOT NULL,
+                    tag_id INTEGER NOT NULL,
+                    PRIMARY KEY (expense_id, tag_id),
+                    FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE CASCADE,
+                    FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+                )
+            """)
+            
             # Create budgets table (unique per category+period)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS budgets (
@@ -143,6 +162,68 @@ class ExpenseDatabase:
             
             row = cursor.fetchone()
             return dict(row) if row else None
+
+    def _ensure_tag(self, name: str, cursor) -> int:
+        cursor.execute("SELECT id FROM tags WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+        cursor.execute("INSERT INTO tags(name) VALUES (?)", (name,))
+        return cursor.lastrowid
+
+    def set_tags_for_expense(self, expense_id: int, tags: List[str]) -> None:
+        """Replace tags for an expense with the provided list."""
+        normalized = [t.strip() for t in tags if t and t.strip()]
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM expense_tags WHERE expense_id = ?", (expense_id,))
+            for tag_name in normalized:
+                tag_id = self._ensure_tag(tag_name, cursor)
+                cursor.execute(
+                    "INSERT OR IGNORE INTO expense_tags(expense_id, tag_id) VALUES (?, ?)",
+                    (expense_id, tag_id),
+                )
+            conn.commit()
+
+    def add_tags_to_expense(self, expense_id: int, tags: List[str]) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            for tag_name in [t.strip() for t in tags if t and t.strip()]:
+                tag_id = self._ensure_tag(tag_name, cursor)
+                cursor.execute(
+                    "INSERT OR IGNORE INTO expense_tags(expense_id, tag_id) VALUES (?, ?)",
+                    (expense_id, tag_id),
+                )
+            conn.commit()
+
+    def remove_tag_from_expense(self, expense_id: int, tag: str) -> None:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM tags WHERE name = ?", (tag,))
+            row = cursor.fetchone()
+            if not row:
+                return
+            tag_id = row[0]
+            cursor.execute(
+                "DELETE FROM expense_tags WHERE expense_id = ? AND tag_id = ?",
+                (expense_id, tag_id),
+            )
+            conn.commit()
+
+    def get_tags_for_expense(self, expense_id: int) -> List[str]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT t.name
+                FROM tags t
+                JOIN expense_tags et ON et.tag_id = t.id
+                WHERE et.expense_id = ?
+                ORDER BY t.name
+                """,
+                (expense_id,),
+            )
+            return [r[0] for r in cursor.fetchall()]
     
     def update_expense(self, expense_id: int, date: Optional[str] = None, category: Optional[str] = None,
                        description: Optional[str] = None, amount: Optional[float] = None) -> bool:
@@ -513,6 +594,8 @@ class ExpenseDatabase:
         end_date: Optional[str] = None,
         min_amount: Optional[float] = None,
         max_amount: Optional[float] = None,
+        tags: Optional[List[str]] = None,
+        tags_match_all: bool = False,
     ) -> List[Dict]:
         """
         Search expenses by keyword (in description or category), category,
@@ -530,45 +613,65 @@ class ExpenseDatabase:
             raise ValueError("Maximum amount cannot be negative")
         
         query = (
-            "SELECT id, date, category, description, amount, created_at FROM expenses"
+            "SELECT e.id, e.date, e.category, e.description, e.amount, e.created_at FROM expenses e"
         )
         clauses = []
         params: List[object] = []
         if keyword:
             like = f"%{keyword}%"
-            clauses.append("(description LIKE ? OR category LIKE ?)")
+            clauses.append("(e.description LIKE ? OR e.category LIKE ?)")
             params.extend([like, like])
         if category:
-            clauses.append("category = ?")
+            clauses.append("e.category = ?")
             params.append(category)
         if start_date and end_date:
-            clauses.append("date BETWEEN ? AND ?")
+            clauses.append("e.date BETWEEN ? AND ?")
             params.extend([start_date, end_date])
         elif start_date:
-            clauses.append("date >= ?")
+            clauses.append("e.date >= ?")
             params.append(start_date)
         elif end_date:
-            clauses.append("date <= ?")
+            clauses.append("e.date <= ?")
             params.append(end_date)
         if min_amount is not None and max_amount is not None:
-            clauses.append("amount BETWEEN ? AND ?")
+            clauses.append("e.amount BETWEEN ? AND ?")
             params.extend([min_amount, max_amount])
         elif min_amount is not None:
-            clauses.append("amount >= ?")
+            clauses.append("e.amount >= ?")
             params.append(min_amount)
         elif max_amount is not None:
-            clauses.append("amount <= ?")
+            clauses.append("e.amount <= ?")
             params.append(max_amount)
+        if tags:
+            # Normalize and build join/filter
+            tag_list = [t.strip() for t in tags if t and t.strip()]
+            if tag_list:
+                if tags_match_all:
+                    # Expenses that have ALL provided tags
+                    placeholders = ",".join(["?"] * len(tag_list))
+                    query += " JOIN expense_tags et ON et.expense_id = e.id JOIN tags t ON t.id = et.tag_id"
+                    clauses.append(f"t.name IN ({placeholders})")
+                    params.extend(tag_list)
+                    query += " GROUP BY e.id HAVING COUNT(DISTINCT t.name) = ?"
+                    params.append(len(tag_list))
+                else:
+                    # Expenses that have ANY of the provided tags
+                    placeholders = ",".join(["?"] * len(tag_list))
+                    query += " JOIN expense_tags et ON et.expense_id = e.id JOIN tags t ON t.id = et.tag_id"
+                    clauses.append(f"t.name IN ({placeholders})")
+                    params.extend(tag_list)
 
         if clauses:
             query += " WHERE " + " AND ".join(clauses)
-        query += " ORDER BY date DESC, created_at DESC"
+        if not (tags and tags_match_all):
+            query += " ORDER BY e.date DESC, e.created_at DESC"
 
         with sqlite3.connect(self.db_path) as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(query, params)
-            return [dict(r) for r in cursor.fetchall()]
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
 
 
 # TODO: Add option to export expenses to Excel or CSV
