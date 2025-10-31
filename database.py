@@ -505,6 +505,71 @@ class ExpenseDatabase:
                 'max': float(mx or 0.0),
             }
 
+    def search_expenses(
+        self,
+        keyword: Optional[str] = None,
+        category: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        min_amount: Optional[float] = None,
+        max_amount: Optional[float] = None,
+    ) -> List[Dict]:
+        """
+        Search expenses by keyword (in description or category), category,
+        date range, and amount range. All filters are optional.
+        """
+        # Validate dates
+        if start_date:
+            datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            datetime.strptime(end_date, "%Y-%m-%d")
+        # Validate amounts
+        if min_amount is not None and min_amount < 0:
+            raise ValueError("Minimum amount cannot be negative")
+        if max_amount is not None and max_amount < 0:
+            raise ValueError("Maximum amount cannot be negative")
+        
+        query = (
+            "SELECT id, date, category, description, amount, created_at FROM expenses"
+        )
+        clauses = []
+        params: List[object] = []
+        if keyword:
+            like = f"%{keyword}%"
+            clauses.append("(description LIKE ? OR category LIKE ?)")
+            params.extend([like, like])
+        if category:
+            clauses.append("category = ?")
+            params.append(category)
+        if start_date and end_date:
+            clauses.append("date BETWEEN ? AND ?")
+            params.extend([start_date, end_date])
+        elif start_date:
+            clauses.append("date >= ?")
+            params.append(start_date)
+        elif end_date:
+            clauses.append("date <= ?")
+            params.append(end_date)
+        if min_amount is not None and max_amount is not None:
+            clauses.append("amount BETWEEN ? AND ?")
+            params.extend([min_amount, max_amount])
+        elif min_amount is not None:
+            clauses.append("amount >= ?")
+            params.append(min_amount)
+        elif max_amount is not None:
+            clauses.append("amount <= ?")
+            params.append(max_amount)
+
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        query += " ORDER BY date DESC, created_at DESC"
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            return [dict(r) for r in cursor.fetchall()]
+
 
 # TODO: Add option to export expenses to Excel or CSV
 # TODO: Add Google Sheets integration for syncing

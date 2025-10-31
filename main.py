@@ -341,6 +341,66 @@ class ExpenseTrackerCLI:
         except Exception as e:
             print(f"Unexpected error: {e}")
 
+    def search_and_filter(self) -> None:
+        """Search and filter expenses by multiple criteria."""
+        print("\n" + "="*40)
+        print("SEARCH / FILTER")
+        print("="*40)
+        print("Provide any filters; press Enter to skip.")
+        keyword = input("Keyword (in description/category): ").strip()
+        category = input("Category: ").strip()
+        start_date = input("Start date YYYY-MM-DD: ").strip()
+        end_date = input("End date YYYY-MM-DD: ").strip()
+        min_amount_in = input("Min amount: $").strip()
+        max_amount_in = input("Max amount: $").strip()
+        
+        # Normalize inputs
+        keyword = keyword or None
+        category = category or None
+        start_date = start_date or None
+        end_date = end_date or None
+        min_amount = None
+        max_amount = None
+        try:
+            if min_amount_in:
+                min_amount = float(min_amount_in)
+            if max_amount_in:
+                max_amount = float(max_amount_in)
+        except ValueError:
+            print("Error: Amounts must be valid numbers.")
+            return
+
+        try:
+            results = self.db.search_expenses(
+                keyword=keyword,
+                category=category,
+                start_date=start_date,
+                end_date=end_date,
+                min_amount=min_amount,
+                max_amount=max_amount,
+            )
+        except ValueError as e:
+            print(f"Error: {e}")
+            return
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            return
+
+        if not results:
+            print("\nNo matching expenses found.")
+            return
+
+        print("\n" + "-"*80)
+        print(f"{'ID':<4} {'Date':<12} {'Category':<15} {'Description':<25} {'Amount':<10}")
+        print("-"*80)
+        total = 0.0
+        for expense in results:
+            description = expense['description'][:24] if len(expense['description']) > 24 else expense['description']
+            print(f"{expense['id']:<4} {expense['date']:<12} {expense['category']:<15} {description:<25} ${expense['amount']:<9.2f}")
+            total += float(expense['amount'])
+        print("-"*80)
+        print(f"Total: {len(results)} expenses | Sum: ${total:.2f}")
+
     def manage_budgets(self) -> None:
         """Manage budgets: set/update and view status."""
         while True:
@@ -397,9 +457,10 @@ class ExpenseTrackerCLI:
             print("9. Edit Expense")
             print("10. Budgets")
             print("11. Calculator")
+            print("12. Search / Filter")
             print("0. Exit")
             
-            choice = input("\nSelect option (0-11): ").strip()
+            choice = input("\nSelect option (0-12): ").strip()
             
             if choice == '0':
                 print("\nThank you for using Personal Expense Tracker!")
@@ -429,6 +490,8 @@ class ExpenseTrackerCLI:
                 self.manage_budgets()
             elif choice == '11':
                 self.calculator_menu()
+            elif choice == '12':
+                self.search_and_filter()
             else:
                 print("Invalid option. Please try again.")
 
