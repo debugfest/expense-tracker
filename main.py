@@ -161,6 +161,73 @@ class ExpenseTrackerCLI:
         except Exception as e:
             print(f"Unexpected error: {e}")
     
+    def edit_expense(self) -> None:
+        """Edit an existing expense by ID."""
+        print("\n" + "="*40)
+        print("EDIT EXPENSE")
+        print("="*40)
+        
+        try:
+            expense_id_input = input("Enter expense ID to edit: ").strip()
+            expense_id = int(expense_id_input)
+            
+            expense = self.db.get_expense_by_id(expense_id)
+            if not expense:
+                print(f"Error: Expense with ID {expense_id} not found.")
+                return
+            
+            print("\nLeave a field blank to keep the current value.")
+            print(f"Current Date: {expense['date']}")
+            new_date = input("New Date (YYYY-MM-DD): ").strip()
+            
+            print(f"Current Category: {expense['category']}")
+            new_category = input("New Category: ").strip()
+            
+            print(f"Current Description: {expense['description']}")
+            new_description = input("New Description: ").strip()
+            
+            print(f"Current Amount: ${expense['amount']:.2f}")
+            new_amount_input = input("New Amount: $").strip()
+            
+            # Prepare updated values; only include changed fields
+            update_kwargs = {}
+            if new_date:
+                update_kwargs['date'] = new_date
+            if new_category:
+                update_kwargs['category'] = new_category
+            if new_description:
+                update_kwargs['description'] = new_description
+            if new_amount_input:
+                try:
+                    new_amount = float(new_amount_input)
+                    if new_amount <= 0:
+                        print("Error: Amount must be positive.")
+                        return
+                    update_kwargs['amount'] = new_amount
+                except ValueError:
+                    print("Error: Invalid amount. Please enter a valid number.")
+                    return
+            
+            if not update_kwargs:
+                print("No changes provided. Nothing to update.")
+                return
+            
+            updated = self.db.update_expense(expense_id, **update_kwargs)
+            if updated:
+                updated_expense = self.db.get_expense_by_id(expense_id)
+                print("\n✅ Expense updated successfully!")
+                print(f"  ID: {updated_expense['id']}")
+                print(f"  Date: {updated_expense['date']}")
+                print(f"  Category: {updated_expense['category']}")
+                print(f"  Description: {updated_expense['description']}")
+                print(f"  Amount: ${updated_expense['amount']:.2f}")
+            else:
+                print("No changes were applied.")
+        except ValueError:
+            print("Error: Please enter a valid expense ID (number).")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+    
     def show_summaries(self) -> None:
         """Show category and monthly summaries."""
         print("\n" + "="*50)
@@ -264,9 +331,10 @@ class ExpenseTrackerCLI:
             print("6. Detailed Report")
             print("7. Statistics")
             print("8. Export to CSV")
+            print("9. Edit Expense")
             print("0. Exit")
             
-            choice = input("\nSelect option (0-8): ").strip()
+            choice = input("\nSelect option (0-9): ").strip()
             
             if choice == '0':
                 print("\nThank you for using Personal Expense Tracker!")
@@ -290,6 +358,8 @@ class ExpenseTrackerCLI:
                 self.show_stats()
             elif choice == '8':
                 self.export_to_csv()
+            elif choice == '9':
+                self.edit_expense()
             else:
                 print("Invalid option. Please try again.")
 

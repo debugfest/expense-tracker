@@ -133,6 +133,57 @@ class ExpenseDatabase:
             row = cursor.fetchone()
             return dict(row) if row else None
     
+    def update_expense(self, expense_id: int, date: Optional[str] = None, category: Optional[str] = None,
+                       description: Optional[str] = None, amount: Optional[float] = None) -> bool:
+        """
+        Update fields of an existing expense.
+        
+        Args:
+            expense_id: ID of the expense to update
+            date: New date (YYYY-MM-DD)
+            category: New category
+            description: New description
+            amount: New amount
+            
+        Returns:
+            True if an expense was updated, False otherwise
+        """
+        if date is None and category is None and description is None and amount is None:
+            return False
+
+        if date is not None:
+            try:
+                datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                raise ValueError("Date must be in YYYY-MM-DD format")
+
+        if amount is not None and amount < 0:
+            raise ValueError("Amount cannot be negative")
+
+        fields = []
+        values = []
+        if date is not None:
+            fields.append("date = ?")
+            values.append(date)
+        if category is not None:
+            fields.append("category = ?")
+            values.append(category)
+        if description is not None:
+            fields.append("description = ?")
+            values.append(description)
+        if amount is not None:
+            fields.append("amount = ?")
+            values.append(amount)
+
+        values.append(expense_id)
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"UPDATE expenses SET {', '.join(fields)} WHERE id = ?", values)
+            updated = cursor.rowcount
+            conn.commit()
+            return updated > 0
+
     def delete_expense(self, expense_id: int) -> bool:
         """
         Delete an expense by ID.
