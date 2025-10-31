@@ -316,6 +316,44 @@ class ExpenseTrackerCLI:
         except Exception as e:
             print(f"Unexpected error during export: {e}")
     
+    def manage_budgets(self) -> None:
+        """Manage budgets: set/update and view status."""
+        while True:
+            print("\n" + "="*40)
+            print("BUDGETS")
+            print("="*40)
+            print("1. Set/Update Budget")
+            print("2. View Budget Status")
+            print("0. Back to main menu")
+            choice = input("\nSelect option (0-2): ").strip()
+            if choice == '0':
+                break
+            elif choice == '1':
+                category = input("Category: ").strip()
+                if not category:
+                    print("Error: Category cannot be empty.")
+                    continue
+                period = input("Period (weekly/monthly/yearly): ").strip().lower()
+                amount_input = input("Budget amount: $").strip()
+                try:
+                    amount = float(amount_input)
+                    if amount < 0:
+                        print("Error: Budget amount cannot be negative.")
+                        continue
+                    self.db.set_budget(category, period, amount)
+                    print("✅ Budget saved.")
+                except ValueError as e:
+                    print(f"Error: {e}")
+                except Exception as e:
+                    print(f"Unexpected error: {e}")
+            elif choice == '2':
+                period = input("Period (weekly/monthly/yearly): ").strip().lower()
+                ref = input("Reference date YYYY-MM-DD (optional, Enter for today): ").strip()
+                ref = ref or None
+                self.reports.print_budget_status(period, ref)
+            else:
+                print("Invalid option. Please try again.")
+    
     def run(self) -> None:
         """Run the main CLI loop."""
         print("Personal Expense Tracker")
@@ -332,9 +370,10 @@ class ExpenseTrackerCLI:
             print("7. Statistics")
             print("8. Export to CSV")
             print("9. Edit Expense")
+            print("10. Budgets")
             print("0. Exit")
             
-            choice = input("\nSelect option (0-9): ").strip()
+            choice = input("\nSelect option (0-10): ").strip()
             
             if choice == '0':
                 print("\nThank you for using Personal Expense Tracker!")
@@ -360,6 +399,8 @@ class ExpenseTrackerCLI:
                 self.export_to_csv()
             elif choice == '9':
                 self.edit_expense()
+            elif choice == '10':
+                self.manage_budgets()
             else:
                 print("Invalid option. Please try again.")
 

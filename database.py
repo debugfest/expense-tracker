@@ -48,6 +48,17 @@ class ExpenseDatabase:
                 )
             """)
             
+            # Create budgets table (unique per category+period)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS budgets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    category TEXT NOT NULL,
+                    period TEXT NOT NULL CHECK (period IN ('weekly','monthly','yearly')),
+                    amount REAL NOT NULL,
+                    UNIQUE(category, period)
+                )
+            """)
+            
             conn.commit()
     
     def add_expense(self, date: str, category: str, description: str, amount: float) -> int:
@@ -222,6 +233,121 @@ class ExpenseDatabase:
         
         return categorized
     
+    def set_budget(self, category: str, period: str, amount: float) -> None:
+        """
+        Create or update a budget for a category and period.
+        """
+        period = period.lower()
+        if period not in ("weekly", "monthly", "yearly"):
+            raise ValueError("Period must be one of: weekly, monthly, yearly")
+        if amount < 0:
+            raise ValueError("Budget amount cannot be negative")
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO budgets(category, period, amount)
+                VALUES(?, ?, ?)
+                ON CONFLICT(category, period) DO UPDATE SET amount=excluded.amount
+                """,
+                (category, period, amount),
+            )
+            conn.commit()
+
+    def get_budget(self, category: str, period: str) -> Optional[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id, category, period, amount FROM budgets WHERE category=? AND period=?",
+                (category, period.lower()),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+
+    def get_all_budgets(self, period: Optional[str] = None) -> List[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            if period:
+                cursor.execute(
+                    "SELECT id, category, period, amount FROM budgets WHERE period=? ORDER BY category",
+                    (period.lower(),),
+                )
+            else:
+                cursor.execute(
+                    "SELECT id, category, period, amount FROM budgets ORDER BY period, category"
+                )
+            return [dict(r) for r in cursor.fetchall()]
+
+    def _get_period_range(self, period: str, reference_date: Optional[str] = None) -> Tuple[str, str]:
+        """
+        Compute inclusive date range (YYYY-MM-DD) for a period based on reference date or today.
+        Weekly range starts on Monday.
+        """
+        from datetime import date, timedelta
+        period = period.lower()
+        if reference_date:
+            base = datetime.strptime(reference_date, "%Y-%m-%d").date()
+        else:
+            base = date.today()
+        if period == "weekly":
+            start = base - timedelta(days=base.weekday())
+            end = start + timedelta(days=6)
+        elif period == "monthly":
+            start = base.replace(day=1)
+            if start.month == 12:
+                next_month = start.replace(year=start.year + 1, month=1, day=1)
+            else:
+                next_month = start.replace(month=start.month + 1, day=1)
+            end = next_month - timedelta(days=1)
+        elif period == "yearly":
+            start = base.replace(month=1, day=1)
+            end = base.replace(month=12, day=31)
+        else:
+            raise ValueError("Period must be one of: weekly, monthly, yearly")
+        return (start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+
+    def get_spent_for_period(self, period: str, category: Optional[str] = None, reference_date: Optional[str] = None) -> float:
+        start, end = self._get_period_range(period, reference_date)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            if category:
+                cursor.execute(
+                    """
+                    SELECT COALESCE(SUM(amount), 0)
+                    FROM expenses
+                    WHERE date BETWEEN ? AND ? AND category = ?
+                    """,
+                    (start, end, category),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT COALESCE(SUM(amount), 0)
+                    FROM expenses
+                    WHERE date BETWEEN ? AND ?
+                    """,
+                    (start, end),
+                )
+            total = cursor.fetchone()[0] or 0.0
+            return float(total)
+
+    def get_spent_by_category_for_period(self, period: str, reference_date: Optional[str] = None) -> Dict[str, float]:
+        start, end = self._get_period_range(period, reference_date)
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT category, COALESCE(SUM(amount), 0) as total
+                FROM expenses
+                WHERE date BETWEEN ? AND ?
+                GROUP BY category
+                """,
+                (start, end),
+            )
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
     def get_category_totals(self) -> Dict[str, float]:
         """
         Get total amount spent per category.

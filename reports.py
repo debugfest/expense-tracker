@@ -120,6 +120,34 @@ class ExpenseReports:
         
         plt.show()
     
+    def print_budget_status(self, period: str, reference_date: Optional[str] = None) -> None:
+        """Print budget utilization per category for a given period."""
+        period = period.lower()
+        if period not in ("weekly", "monthly", "yearly"):
+            print("Error: Period must be weekly, monthly, or yearly.")
+            return
+        budgets = self.db.get_all_budgets(period)
+        if not budgets:
+            print(f"No budgets configured for {period} period.")
+            return
+        spent_by_category = self.db.get_spent_by_category_for_period(period, reference_date)
+        print("\n" + "="*60)
+        print(f"BUDGET STATUS ({period.upper()})")
+        print("="*60)
+        print(f"{'Category':<18} {'Budget':>10} {'Spent':>10} {'Remain':>10} {'Used%':>7}")
+        print("-"*60)
+        for b in budgets:
+            category = b['category']
+            budget_amount = float(b['amount'])
+            spent = float(spent_by_category.get(category, 0.0))
+            remain = budget_amount - spent
+            used_pct = (spent / budget_amount * 100) if budget_amount > 0 else 0.0
+            status_line = f"{category:<18} ${budget_amount:>9.2f} ${spent:>9.2f} ${remain:>9.2f} {used_pct:>6.1f}%"
+            if remain < 0:
+                status_line += "  OVER"
+            print(status_line)
+        print("="*60)
+
     def generate_monthly_chart(self, save_path: Optional[str] = None) -> None:
         """
         Generate a bar chart showing expenses by month.
