@@ -10,6 +10,7 @@ import matplotlib.dates as mdates
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import os
+import csv
 from pathlib import Path
 
 from database import ExpenseDatabase
@@ -28,6 +29,46 @@ class ExpenseReports:
         self.db = db
         self._setup_matplotlib()
     
+    def export_to_csv(self, file_path: Optional[str] = None) -> str:
+        """
+        Export all expenses to a CSV file.
+        
+        Args:
+            file_path: Optional path for the CSV file. If not provided, a file
+                       will be created under an `exports/` directory with a
+                       timestamped filename.
+        
+        Returns:
+            The path to the written CSV file.
+        """
+        expenses = self.db.get_all_expenses()
+        if not expenses:
+            raise ValueError("No expenses available to export.")
+
+        # Determine output path
+        if file_path is None:
+            exports_dir = Path("exports")
+            exports_dir.mkdir(exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            file_path = str(exports_dir / f"expenses_{timestamp}.csv")
+        else:
+            out_path = Path(file_path)
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path = str(out_path)
+
+        # Write CSV
+        fieldnames = ["id", "date", "category", "description", "amount", "created_at"]
+        with open(file_path, mode="w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for exp in expenses:
+                # Ensure only expected fields are written
+                row = {key: exp.get(key, "") for key in fieldnames}
+                writer.writerow(row)
+
+        print(f"CSV exported to: {file_path}")
+        return file_path
+
     def _setup_matplotlib(self) -> None:
         """Configure matplotlib for better visualizations."""
         plt.style.use('default')
@@ -79,6 +120,34 @@ class ExpenseReports:
         
         plt.show()
     
+    def print_budget_status(self, period: str, reference_date: Optional[str] = None) -> None:
+        """Print budget utilization per category for a given period."""
+        period = period.lower()
+        if period not in ("weekly", "monthly", "yearly"):
+            print("Error: Period must be weekly, monthly, or yearly.")
+            return
+        budgets = self.db.get_all_budgets(period)
+        if not budgets:
+            print(f"No budgets configured for {period} period.")
+            return
+        spent_by_category = self.db.get_spent_by_category_for_period(period, reference_date)
+        print("\n" + "="*60)
+        print(f"BUDGET STATUS ({period.upper()})")
+        print("="*60)
+        print(f"{'Category':<18} {'Budget':>10} {'Spent':>10} {'Remain':>10} {'Used%':>7}")
+        print("-"*60)
+        for b in budgets:
+            category = b['category']
+            budget_amount = float(b['amount'])
+            spent = float(spent_by_category.get(category, 0.0))
+            remain = budget_amount - spent
+            used_pct = (spent / budget_amount * 100) if budget_amount > 0 else 0.0
+            status_line = f"{category:<18} ${budget_amount:>9.2f} ${spent:>9.2f} ${remain:>9.2f} {used_pct:>6.1f}%"
+            if remain < 0:
+                status_line += "  OVER"
+            print(status_line)
+        print("="*60)
+
     def generate_monthly_chart(self, save_path: Optional[str] = None) -> None:
         """
         Generate a bar chart showing expenses by month.
