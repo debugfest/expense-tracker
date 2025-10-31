@@ -316,6 +316,31 @@ class ExpenseTrackerCLI:
         except Exception as e:
             print(f"Unexpected error during export: {e}")
     
+    def calculator_menu(self) -> None:
+        """Simple calculator for sum, average, min, max with optional filters."""
+        print("\n" + "="*40)
+        print("CALCULATOR")
+        print("="*40)
+        print("Provide optional filters; press Enter to skip.")
+        category = input("Category (optional): ").strip()
+        start_date = input("Start date YYYY-MM-DD (optional): ").strip()
+        end_date = input("End date YYYY-MM-DD (optional): ").strip()
+        category = category or None
+        start_date = start_date or None
+        end_date = end_date or None
+        try:
+            stats = self.db.get_calculator_stats(category, start_date, end_date)
+            print("\n" + "-"*40)
+            print(f"Sum:     ${stats['sum']:.2f}")
+            print(f"Average: ${stats['average']:.2f}")
+            print(f"Min:     ${stats['min']:.2f}")
+            print(f"Max:     ${stats['max']:.2f}")
+            print("-"*40)
+        except ValueError as e:
+            print(f"Error: {e}")
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+
     def manage_budgets(self) -> None:
         """Manage budgets: set/update and view status."""
         while True:
@@ -371,9 +396,10 @@ class ExpenseTrackerCLI:
             print("8. Export to CSV")
             print("9. Edit Expense")
             print("10. Budgets")
+            print("11. Calculator")
             print("0. Exit")
             
-            choice = input("\nSelect option (0-10): ").strip()
+            choice = input("\nSelect option (0-11): ").strip()
             
             if choice == '0':
                 print("\nThank you for using Personal Expense Tracker!")
@@ -401,6 +427,8 @@ class ExpenseTrackerCLI:
                 self.edit_expense()
             elif choice == '10':
                 self.manage_budgets()
+            elif choice == '11':
+                self.calculator_menu()
             else:
                 print("Invalid option. Please try again.")
 

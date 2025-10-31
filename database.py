@@ -463,6 +463,48 @@ class ExpenseDatabase:
                 'total_categories': total_categories
             }
 
+    def get_calculator_stats(self, category: Optional[str] = None,
+                             start_date: Optional[str] = None,
+                             end_date: Optional[str] = None) -> Dict[str, float]:
+        """
+        Compute sum, average, min, and max for expenses with optional filters.
+        Dates must be in YYYY-MM-DD if provided.
+        """
+        # Validate dates
+        if start_date:
+            datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            datetime.strptime(end_date, "%Y-%m-%d")
+
+        query = "SELECT COALESCE(SUM(amount),0), COALESCE(AVG(amount),0), COALESCE(MIN(amount),0), COALESCE(MAX(amount),0) FROM expenses"
+        clauses = []
+        params: List[object] = []
+        if category:
+            clauses.append("category = ?")
+            params.append(category)
+        if start_date and end_date:
+            clauses.append("date BETWEEN ? AND ?")
+            params.extend([start_date, end_date])
+        elif start_date:
+            clauses.append("date >= ?")
+            params.append(start_date)
+        elif end_date:
+            clauses.append("date <= ?")
+            params.append(end_date)
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            s, a, mn, mx = cursor.fetchone()
+            return {
+                'sum': float(s or 0.0),
+                'average': float(a or 0.0),
+                'min': float(mn or 0.0),
+                'max': float(mx or 0.0),
+            }
+
 
 # TODO: Add option to export expenses to Excel or CSV
 # TODO: Add Google Sheets integration for syncing
