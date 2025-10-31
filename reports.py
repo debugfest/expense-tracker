@@ -57,7 +57,7 @@ class ExpenseReports:
             file_path = str(out_path)
 
         # Write CSV
-        fieldnames = ["id", "date", "category", "description", "amount", "created_at"]
+        fieldnames = ["id", "date", "category", "description", "amount", "currency", "created_at"]
         with open(file_path, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()

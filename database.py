@@ -48,6 +48,15 @@ class ExpenseDatabase:
                 )
             """)
             
+            # Ensure currency column exists on expenses (default USD)
+            try:
+                cursor.execute("PRAGMA table_info(expenses)")
+                cols = [r[1] for r in cursor.fetchall()]
+                if 'currency' not in cols:
+                    cursor.execute("ALTER TABLE expenses ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'")
+            except Exception:
+                pass
+            
             # Create tags table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS tags (
@@ -80,7 +89,7 @@ class ExpenseDatabase:
             
             conn.commit()
     
-    def add_expense(self, date: str, category: str, description: str, amount: float) -> int:
+    def add_expense(self, date: str, category: str, description: str, amount: float, currency: str = "USD") -> int:
         """
         Add a new expense to the database.
         
@@ -105,12 +114,19 @@ class ExpenseDatabase:
         except ValueError:
             raise ValueError("Date must be in YYYY-MM-DD format")
         
+        # Normalize currency (support USD and INR/RS)
+        normalized_currency = currency.strip().upper()
+        if normalized_currency in ("RS", "INR", "₹"):
+            normalized_currency = "INR"
+        if normalized_currency not in ("USD", "INR"):
+            normalized_currency = "USD"
+
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO expenses (date, category, description, amount)
-                VALUES (?, ?, ?, ?)
-            """, (date, category, description, amount))
+                INSERT INTO expenses (date, category, description, amount, currency)
+                VALUES (?, ?, ?, ?, ?)
+            """, (date, category, description, amount, normalized_currency))
             
             expense_id = cursor.lastrowid
             conn.commit()
@@ -129,7 +145,7 @@ class ExpenseDatabase:
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT id, date, category, description, amount, created_at
+                SELECT id, date, category, description, amount, currency, created_at
                 FROM expenses
                 ORDER BY date DESC, created_at DESC
             """)
@@ -155,7 +171,7 @@ class ExpenseDatabase:
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT id, date, category, description, amount, created_at
+                SELECT id, date, category, description, amount, currency, created_at
                 FROM expenses
                 WHERE id = ?
             """, (expense_id,))
@@ -226,7 +242,7 @@ class ExpenseDatabase:
             return [r[0] for r in cursor.fetchall()]
     
     def update_expense(self, expense_id: int, date: Optional[str] = None, category: Optional[str] = None,
-                       description: Optional[str] = None, amount: Optional[float] = None) -> bool:
+                       description: Optional[str] = None, amount: Optional[float] = None, currency: Optional[str] = None) -> bool:
         """
         Update fields of an existing expense.
         
@@ -240,7 +256,7 @@ class ExpenseDatabase:
         Returns:
             True if an expense was updated, False otherwise
         """
-        if date is None and category is None and description is None and amount is None:
+        if date is None and category is None and description is None and amount is None and currency is None:
             return False
 
         if date is not None:
@@ -251,6 +267,12 @@ class ExpenseDatabase:
 
         if amount is not None and amount < 0:
             raise ValueError("Amount cannot be negative")
+        if currency is not None:
+            normalized_currency = currency.strip().upper()
+            if normalized_currency in ("RS", "INR", "₹"):
+                normalized_currency = "INR"
+            if normalized_currency not in ("USD", "INR"):
+                raise ValueError("Currency must be USD or INR")
 
         fields = []
         values = []
@@ -266,6 +288,9 @@ class ExpenseDatabase:
         if amount is not None:
             fields.append("amount = ?")
             values.append(amount)
+        if currency is not None:
+            fields.append("currency = ?")
+            values.append(normalized_currency)
 
         values.append(expense_id)
 
@@ -483,7 +508,7 @@ class ExpenseDatabase:
             cursor = conn.cursor()
             
             cursor.execute("""
-                SELECT id, date, category, description, amount, created_at
+                SELECT id, date, category, description, amount, currency, created_at
                 FROM expenses
                 WHERE strftime('%Y', date) = ? AND strftime('%m', date) = ?
                 ORDER BY date DESC

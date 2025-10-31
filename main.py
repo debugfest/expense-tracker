@@ -77,12 +77,18 @@ class ExpenseTrackerCLI:
                 print("Error: Invalid amount. Please enter a valid number.")
                 return
             
+            # Get currency
+            currency_input = input("Currency (USD/INR, default USD): ").strip().upper()
+            if currency_input in ("RS", "₹"):
+                currency_input = "INR"
+            currency = currency_input if currency_input in ("USD", "INR") else "USD"
+            
             # Get tags (optional)
             tags_input = input("Enter tags (comma-separated, optional): ").strip()
             tags = [t.strip() for t in tags_input.split(',')] if tags_input else []
             
             # Add expense to database
-            expense_id = self.db.add_expense(expense_date, category, description, amount)
+            expense_id = self.db.add_expense(expense_date, category, description, amount, currency)
             if tags:
                 try:
                     self.db.set_tags_for_expense(expense_id, tags)
@@ -94,7 +100,9 @@ class ExpenseTrackerCLI:
             print(f"   Date: {expense_date}")
             print(f"   Category: {category}")
             print(f"   Description: {description}")
-            print(f"   Amount: ${amount:.2f}")
+            # Display currency symbol
+            symbol = "$" if currency == "USD" else "₹"
+            print(f"   Amount: {symbol}{amount:.2f} {currency}")
             if tags:
                 print(f"   Tags: {', '.join(tags)}")
             
@@ -122,13 +130,14 @@ class ExpenseTrackerCLI:
             print(f"Showing all {len(expenses)} expenses:")
         
         print("-"*80)
-        print(f"{'ID':<4} {'Date':<12} {'Category':<15} {'Description':<25} {'Amount':<10}")
+        print(f"{'ID':<4} {'Date':<12} {'Category':<15} {'Description':<25} {'Amount':<14}")
         print("-"*80)
         
         for expense in expenses:
             description = expense['description'][:24] if len(expense['description']) > 24 else expense['description']
+            symbol = "$" if expense.get('currency', 'USD') == "USD" else "₹"
             print(f"{expense['id']:<4} {expense['date']:<12} {expense['category']:<15} "
-                  f"{description:<25} ${expense['amount']:<9.2f}")
+                  f"{description:<25} {symbol}{expense['amount']:<9.2f} {expense.get('currency','USD')}")
         
         print("-"*80)
         print(f"Total: {len(expenses)} expenses")
@@ -199,6 +208,10 @@ class ExpenseTrackerCLI:
             
             print(f"Current Amount: ${expense['amount']:.2f}")
             new_amount_input = input("New Amount: $").strip()
+            print(f"Current Currency: {expense.get('currency','USD')}")
+            new_currency = input("New Currency (USD/INR, blank to keep): ").strip().upper()
+            if new_currency in ("RS", "₹"):
+                new_currency = "INR"
             
             # Prepare updated values; only include changed fields
             update_kwargs = {}
@@ -218,6 +231,11 @@ class ExpenseTrackerCLI:
                 except ValueError:
                     print("Error: Invalid amount. Please enter a valid number.")
                     return
+            if new_currency:
+                if new_currency not in ("USD", "INR"):
+                    print("Error: Currency must be USD or INR.")
+                    return
+                update_kwargs['currency'] = new_currency
             
             if not update_kwargs:
                 print("No changes provided. Nothing to update.")
@@ -232,6 +250,7 @@ class ExpenseTrackerCLI:
                 print(f"  Category: {updated_expense['category']}")
                 print(f"  Description: {updated_expense['description']}")
                 print(f"  Amount: ${updated_expense['amount']:.2f}")
+                print(f"  Currency: {updated_expense.get('currency','USD')}")
             else:
                 print("No changes were applied.")
         except ValueError:
@@ -382,6 +401,9 @@ class ExpenseTrackerCLI:
         print("="*40)
         print("Provide optional filters; press Enter to skip.")
         category = input("Category (optional): ").strip()
+        currency = input("Currency (USD/INR, optional): ").strip().upper()
+        if currency in ("RS", "₹"): currency = "INR"
+        currency = currency or None
         start_date = input("Start date YYYY-MM-DD (optional): ").strip()
         end_date = input("End date YYYY-MM-DD (optional): ").strip()
         category = category or None
